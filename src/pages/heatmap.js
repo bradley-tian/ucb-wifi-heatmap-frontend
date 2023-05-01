@@ -8,28 +8,79 @@ import markerHighlight from "../assets/marker-highlight.png";
 import { Icon } from 'leaflet'
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { Button, Grid, FormControl, Select, MenuItem, InputLabel } from '@mui/material';
+import Typography from '@mui/material/Typography';
 
 function Heatmap() {
 
     const [params, setParams] = useSearchParams();
-    let initial = params.get('lon') && params.get('lat') ? [params.get('lon'), params.get('lat')] : [37.8719, -122.2585];
+    const DEFAULT = [37.8719, -122.2585];
+    let initial = params.get('lon') && params.get('lat') ? [params.get('lon'), params.get('lat')] : DEFAULT;
+    const [userSelect, setUserSelect] = useState('');
+    const [strengthStr, setStrengthStr] = useState('');
     const [current, setCurrent] = useState(initial);
     const uuid = params.get('uuid') ? params.get('uuid') : 'Anonymous';
     let initialized = false;
+    const [inputs, setInputs] = useState({});
+    const [report, setReport] = useState();
+    const [defaultWarning, setDefaultWarning] = useState(false);
+    const URL = process.env.REACT_APP_API_URL;
 
-    const coords = {
-        sather_gate: [37.8703, -122.2595],
-        mlk: [37.8692, -122.2597],
-        moffitt: [37.8725, -122.2608],
-        doe: [37.8722, -122.2592],
-        east_asian: [37.8736, -122.2600],
-        kresge: [37.8738, -122.2583],
-        haas: [37.8716, -122.2533],
+    async function getInputs() {
+        await fetch("http://127.0.0.1:5000/get-inputs", {
+            method: 'GET',
+        })
+            .then(response => { return response.json() })
+            .then(data => {
+                console.log(data);
+                setInputs(data);
+            })
     }
 
-    const Unstable = { fillColor: '#F9E238' };
-    const Slow = { fillColor: '#F99838' };
-    const Down = { fillColor: '#F94F38' };
+    useEffect(() => {
+        if (Object.keys(inputs).length === 0) {
+            getInputs();
+        }
+        else {
+            console.log("Current Inputs:", inputs);
+        }
+        console.log(URL);
+    }, [])
+
+    const coords = {
+        "Default": DEFAULT,
+        "Sather Gate": [37.8703, -122.2595],
+        "ASUC Student Union (MLK Jr. Building)": [37.8692, -122.2597],
+        "Moffitt Library": [37.8725, -122.2608],
+        "Doe Library": [37.8722, -122.2592],
+        "East Asian Library": [37.8736, -122.2600],
+        "Kresge Engineering Library": [37.8738, -122.2583],
+        "Haas Courtyard": [37.8716, -122.2533],
+    }
+
+    const strengths = {
+        "Slow": 1,
+        "Unstable": 2,
+        "Down": 3,
+    }
+
+    async function submitReport() {
+        let loc = report[0];
+        if (loc === "") {
+            loc = "Default";
+        }
+        await fetch(`${URL}/send-input`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+            },
+            body: JSON.stringify({
+                uuid: uuid,
+                location: loc,
+                signal: report[1],
+            })
+        })
+    }
 
     //Theme Configuration
     const theme = createTheme({
@@ -41,6 +92,9 @@ function Heatmap() {
                 main: '#FFFFFF',
                 contrastText: '#4EB0F3',
             },
+            warning: {
+                main: '#FF5D5D',
+            }
         },
     });
 
@@ -60,22 +114,50 @@ function Heatmap() {
         )
     }
 
-    function Zone(props) {
-        return (
-            <Circle center={props.pos} pathOptions={props.deg} radius={props.rad} />
-        )
-    }
-
     //Fetch geolocation from query string
     useEffect(() => {
         if (!initialized && navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(function (position) {
                 initial = [position.coords.latitude, position.coords.longitude];
-                console.log(`Initial: ${initial}`);
                 initialized = true;
             });
         };
     }, [])
+
+    useEffect(() => {
+        if (current.toString() == DEFAULT.toString()) {
+            setDefaultWarning(true);
+        } else {
+            setDefaultWarning(false);
+        }
+    }, [current])
+
+    function BuildingZone(props) {
+        const colors = {
+            NA: "#FFFFFF00",
+            Light: '#F9E238',
+            Medium: '#F99838',
+            Heavy: '#F94F38',
+        }
+
+        let color = ["#FFFFFF00", colors['NA']];
+
+        const name = props.name;
+        if (inputs[name] > 0) {
+            color[0] = "#FFFFFF";
+            if (inputs[name] <= 25) {
+                color[1] = colors['Light'];
+            } else if (inputs[name] <= 50) {
+                color[1] = colors['Medium'];
+            } else {
+                color[1] = colors['Heavy'];
+            }
+        }
+
+        return (
+            <Circle center={coords[name]} key={name} color={color[0]} fillColor={color[1]} fillOpacity={0.65} radius={30} />
+        )
+    }
 
     function BerkeleyMap(props) {
         return (
@@ -86,23 +168,17 @@ function Heatmap() {
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
 
-                    <BerkeleyMarker pos={coords.sather_gate} desc='Sather Gate' />
-                    <BerkeleyMarker pos={coords.mlk} desc='MLK Jr. Building (ASUC Student Union)' />
-                    <BerkeleyMarker pos={coords.moffitt} desc='Moffitt Library' />
-                    <BerkeleyMarker pos={coords.doe} desc='Doe Library' />
-                    <BerkeleyMarker pos={coords.east_asian} desc='East Asian Library' />
-                    <BerkeleyMarker pos={coords.kresge} desc='Kresge Library' />
-                    <BerkeleyMarker pos={coords.haas} desc='Haas School of Business' />
-                    <BerkeleyMarker pos={props.current} desc={`Current User: ${uuid}`} />
+                    <BerkeleyMarker pos={coords['Sather Gate']} desc='Sather Gate' />
+                    <BerkeleyMarker pos={coords['ASUC Student Union (MLK Jr. Building)']} desc='ASUC Student Union (MLK Jr. Building)' />
+                    <BerkeleyMarker pos={coords['Moffitt Library']} desc='Moffitt Library' />
+                    <BerkeleyMarker pos={coords['Doe Library']} desc='Doe Library' />
+                    <BerkeleyMarker pos={coords['East Asian Library']} desc='East Asian Library' />
+                    <BerkeleyMarker pos={coords['Kresge Engineering Library']} desc='Kresge Library' />
+                    <BerkeleyMarker pos={coords['Haas Courtyard']} desc='Haas School of Business' />
+                    <BerkeleyMarker pos={props.current} desc={'Current User'} />
 
-                    <Zone pos={coords.moffitt} deg={Down} rad={50} />
+                    {Object.entries(inputs).map(([building, value], i) => <BuildingZone name={building} />)}
 
-                    <Zone pos={coords.mlk} deg={Unstable} rad={80} />
-                    <Zone pos={coords.mlk} deg={Slow} rad={50} />
-                    <Zone pos={coords.mlk} deg={Down} rad={30} />
-
-                    <Zone pos={coords.haas} deg={Slow} rad={40} />
-                    <Zone pos={coords.haas} deg={Unstable} rad={65} />
                 </MapContainer>
             </div>
         )
@@ -113,34 +189,82 @@ function Heatmap() {
             <ThemeProvider theme={theme}>
                 <div className="page">
                     <BerkeleyMap current={current}></BerkeleyMap>
-                    <Grid container spacing={2}>
-                        <Grid item xs={2}>
+                    <Grid container spacing={5}>
+                        <Grid item xs={4}>
+                            <Typography variant="h6" style={{ marginBottom: "5px" }}>Where are you located?</Typography>
+                            <FormControl fullWidth style={{ marginBottom: "20px" }}>
+                                <InputLabel>Select Current Location</InputLabel>
+                                <Select
+                                    id="location"
+                                    value={userSelect}
+                                    label='Select Current Location'
+                                    onChange={event => {
+                                        setUserSelect(event.target.value);
+                                        setCurrent(coords[event.target.value]);
+                                        console.log(coords[event.target.value]);
+                                        setParams(params);
+                                    }}
+                                >
+                                    <MenuItem value="ASUC Student Union (MLK Jr. Building)">ASUC Student Union (MLK Jr. Building)</MenuItem>
+                                    <MenuItem value="Doe Library">Doe Library</MenuItem>
+                                    <MenuItem value="East Asian Library">East Asian Library</MenuItem>
+                                    <MenuItem value="Haas Courtyard">Haas Courtyard</MenuItem>
+                                    <MenuItem value="Kresge Engineering Library">Kresge Engineering Library</MenuItem>
+                                    <MenuItem value="Moffitt Library">Moffitt Library</MenuItem>
+                                    <MenuItem value="Sather Gate">Sather Gate</MenuItem>
+                                </Select>
+                            </FormControl>
                             <Button
                                 variant="contained"
                                 color="neutral"
                                 onClick={() => {
-                                    setCurrent(initial);
+                                    setUserSelect('');
+                                    setCurrent(DEFAULT);
                                 }}
-                                className="resetLocation">Reset Location</Button>
+                            >Reset Location</Button>
                         </Grid>
-                        <Grid item xs={3.5}>
-                            <FormControl fullWidth>
-                                <InputLabel>Manually Select Location</InputLabel>
+                        <Grid item xs={8}>
+                            <Typography variant="h6">How is the campus WIFI at your current location?</Typography>
+                            <FormControl fullWidth style={{ marginTop: "5px", marginBottom: "20px" }}>
+                                <InputLabel>Select your response</InputLabel>
                                 <Select
                                     id="location"
-                                    value=''
-                                    label='Manually Select Location'
+                                    value={strengthStr}
+                                    label='Select your response'
                                     onChange={event => {
-                                        setCurrent(event.target.value);
-                                        console.log(current);
-                                        setParams(params);
+                                        if (!defaultWarning) {
+                                            setStrengthStr(event.target.value)
+                                            setReport([userSelect, strengths[event.target.value]]);
+                                            setParams(params);
+                                            console.log([userSelect, strengths[event.target.value]]);
+                                        }
                                     }}
                                 >
-                                    <MenuItem value={coords.doe}>Doe Library</MenuItem>
-                                    <MenuItem value={coords.east_asian}>East Asian Library</MenuItem>
-                                    <MenuItem value={coords.haas}>Haas Courtyard</MenuItem>
+                                    <MenuItem value="Slow">Slow</MenuItem>
+                                    <MenuItem value="Unstable">Unstable</MenuItem>
+                                    <MenuItem value="Down">Down</MenuItem>
                                 </Select>
                             </FormControl>
+                            <div style={{ marginBottom: '10px' }}>
+                                <span>
+                                    <Button
+                                        variant="contained"
+                                        color="neutral"
+                                        onClick={submitReport}
+                                        className="actionButton">Submit Feedback</Button>
+                                    <Button
+                                        variant="contained"
+                                        color="neutral"
+                                        onClick={() => {
+                                            setCurrent(DEFAULT);
+                                            setUserSelect('');
+                                            setStrengthStr('');
+                                        }}
+                                        style={{ marginLeft: "1rem" }}
+                                        className="actionButton">Clear Response</Button>
+                                </span>
+                            </div>
+                            {defaultWarning ? <Typography variant="p" style={{ marginTop: "5px" }} color="warning">Please select your current location first.</Typography> : <></>}
                         </Grid>
                     </Grid>
                 </div>

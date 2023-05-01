@@ -18,9 +18,9 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
+    "start": "env-cmd -f .env.testing react-scripts start",
+    "build": "env-cmd -f .env.production react-scripts build",
+    "test": "env-cmd -f .env.testing react-scripts test",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
@@ -40,5 +40,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "env-cmd": "^10.1.0"
   }
 }
